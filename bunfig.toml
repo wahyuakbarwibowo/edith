@@ -1,0 +1,3 @@
+[serve.static]
+# Inline only PUBLIC_* env vars into the browser bundle.
+env = "PUBLIC_*"

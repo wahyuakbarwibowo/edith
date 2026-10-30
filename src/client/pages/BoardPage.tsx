@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
-import { dropPosition, type Board, type Card, type List, type User } from "../../shared/types/index.ts";
+import { dropPosition, positionBetween, type Board, type Card, type List, type User } from "../../shared/types/index.ts";
 import { InlineForm } from "../components/InlineForm.tsx";
 import { CardModal } from "../features/cards/CardModal.tsx";
-import { api, report } from "../lib/api.ts";
-import { joinBoard, onEvent } from "../lib/socket.ts";
+import { createCard, createList, deleteList, getBoard, renameBoard, updateCard, updateList } from "../lib/data.ts";
+import { report, subscribe } from "../lib/supabase.ts";
 
 type Drag = { type: "card" | "list"; id: string } | null;
 
@@ -14,25 +14,18 @@ export function BoardPage({ id, user }: { id: string; user: User }) {
   const [openCard, setOpenCard] = useState<string | null>(null);
   const drag = useRef<Drag>(null);
 
-  const load = useCallback(() => api<Board>(`/boards/${id}`).then(setBoard, () => setBoard(null)), [id]);
+  const load = useCallback(() => getBoard(id).then(setBoard, () => setBoard(null)), [id]);
   const closeCard = useCallback(() => setOpenCard(null), []);
 
   useEffect(() => {
     load();
-    const leave = joinBoard(id);
-    const off = onEvent((e) => {
-      if (e.type === "board:changed" && e.boardId === id) load();
-    });
-    return () => {
-      leave();
-      off();
-    };
+    return subscribe(`board:${id}`, "changed", load, load);
   }, [id, load]);
 
   if (board === undefined) return null;
   if (board === null) return <main className="home"><p>Board not found.</p></main>;
 
-  // Optimistic local update; the server's board:changed event re-syncs everyone.
+  // Optimistic local update; the database's board broadcast re-syncs everyone.
   function moveCard(cardId: string, listId: string, position: number) {
     setBoard((b) => {
       if (!b) return b;
@@ -45,7 +38,7 @@ export function BoardPage({ id, user }: { id: string; user: User }) {
         })),
       };
     });
-    api(`/cards/${cardId}`, { method: "PATCH", body: { listId, position } }).catch((e) => (report(e), load()));
+    updateCard(cardId, { listId, position }).catch((e) => (report(e), load()));
   }
 
   function dropCard(e: DragEvent, list: List, targetCardId?: string) {
@@ -62,16 +55,16 @@ export function BoardPage({ id, user }: { id: string; user: User }) {
     e.preventDefault();
     const position = dropPosition(board.lists, d.id, targetListId);
     setBoard({ ...board, lists: byPosition(board.lists.map((l) => (l.id === d.id ? { ...l, position } : l))) });
-    api(`/lists/${d.id}`, { method: "PATCH", body: { position } }).catch((e) => (report(e), load()));
+    updateList(d.id, { position }).catch((e) => (report(e), load()));
   }
 
   const allowDrop = (type: "card" | "list") => (e: DragEvent) => {
     if (drag.current?.type === type) e.preventDefault();
   };
 
-  const rename = (path: string, current: string) => (value: string) => {
+  const rename = (save: (title: string) => Promise<unknown>, current: string) => (value: string) => {
     const title = value.trim();
-    if (title && title !== current) api(path, { method: "PATCH", body: { title } }).catch(report);
+    if (title && title !== current) save(title).catch(report);
   };
 
   return (
@@ -81,7 +74,7 @@ export function BoardPage({ id, user }: { id: string; user: User }) {
         className="board-title"
         defaultValue={board.title}
         aria-label="Board title"
-        onBlur={(e) => rename(`/boards/${id}`, board.title)(e.target.value)}
+        onBlur={(e) => rename((title) => renameBoard(id, title), board.title)(e.target.value)}
       />
       <div className="lists">
         {board.lists.map((list) => (
@@ -103,11 +96,11 @@ export function BoardPage({ id, user }: { id: string; user: User }) {
                 key={list.title}
                 defaultValue={list.title}
                 aria-label="List title"
-                onBlur={(e) => rename(`/lists/${list.id}`, list.title)(e.target.value)}
+                onBlur={(e) => rename((title) => updateList(list.id, { title }), list.title)(e.target.value)}
               />
               <button
                 aria-label={`Delete list ${list.title}`}
-                onClick={() => confirm(`Delete list "${list.title}" and its cards?`) && api(`/lists/${list.id}`, { method: "DELETE" }).catch(report)}
+                onClick={() => confirm(`Delete list "${list.title}" and its cards?`) && deleteList(list.id).catch(report)}
               >
                 ×
               </button>
@@ -131,15 +124,15 @@ export function BoardPage({ id, user }: { id: string; user: User }) {
             <InlineForm
               placeholder="Add a card"
               button="Add"
-              onSubmit={(title) => api(`/lists/${list.id}/cards`, { body: { title } }).catch(report)}
+              onSubmit={(title) => createCard(list.id, title, positionBetween(list.cards.at(-1)?.position)).catch(report)}
             />
           </section>
         ))}
         <section className="list new-list">
-          <InlineForm placeholder="Add a list" button="Add" onSubmit={(title) => api(`/boards/${id}/lists`, { body: { title } }).catch(report)} />
+          <InlineForm placeholder="Add a list" button="Add" onSubmit={(title) => createList(id, title, positionBetween(board.lists.at(-1)?.position)).catch(report)} />
         </section>
       </div>
-      {openCard && <CardModal key={openCard} cardId={openCard} lists={board.lists} user={user} onClose={closeCard} />}
+      {openCard && <CardModal key={openCard} cardId={openCard} boardId={id} lists={board.lists} user={user} onClose={closeCard} />}
     </main>
   );
 }

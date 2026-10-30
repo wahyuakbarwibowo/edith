@@ -1,19 +1,15 @@
 // Wire shapes: dates arrive as ISO strings over JSON.
 export interface User { id: string; email: string; name: string }
 export interface BoardSummary { id: string; title: string }
-export interface Workspace { id: string; name: string; role: "owner" | "member"; boards: BoardSummary[] }
+export interface Workspace { id: string; name: string; createdAt: string; role: "owner" | "member"; boards: BoardSummary[] }
 export interface Member { id: string; name: string; email: string; role: "owner" | "member" }
 export interface Card { id: string; listId: string; title: string; description: string; position: number; dueDate: string | null }
 export interface List { id: string; title: string; position: number; cards: Card[] }
 export interface Board { id: string; workspaceId: string; title: string; lists: List[] }
 export interface Comment { id: string; body: string; createdAt: string; userId: string; userName: string }
-export interface Attachment { id: string; name: string; url: string }
-export interface CardDetail extends Card { boardId: string; comments: Comment[]; attachments: Attachment[] }
+export interface Attachment { id: string; name: string; path: string; url: string }
+export interface CardDetail extends Card { comments: Comment[]; attachments: Attachment[] }
 export interface Notification { id: string; type: string; data: Record<string, string>; readAt: string | null; createdAt: string }
-
-export type ServerEvent =
-  | { type: "board:changed"; boardId: string }
-  | { type: "notification"; notification: Notification };
 
 const GAP = 1024;
 

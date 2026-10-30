@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Notification, User } from "../../shared/types/index.ts";
-import { api } from "../lib/api.ts";
+import { getNotifications, markNotificationsRead } from "../lib/data.ts";
 import { linkTo } from "../lib/router.ts";
-import { onEvent } from "../lib/socket.ts";
+import { subscribe } from "../lib/supabase.ts";
 
 function describe(n: Notification) {
   const d = n.data;
@@ -15,16 +15,20 @@ export function Header({ user, onLogout }: { user: User; onLogout: () => void })
   const [items, setItems] = useState<Notification[]>([]);
 
   useEffect(() => {
-    api<Notification[]>("/notifications").then(setItems, () => {});
-    return onEvent((e) => {
-      if (e.type === "notification") setItems((xs) => [e.notification, ...xs]);
-    });
-  }, []);
+    const load = () => getNotifications().then(setItems, () => {});
+    load();
+    return subscribe(
+      `user:${user.id}`,
+      "notification",
+      (n) => setItems((xs) => [{ id: n.id, type: n.type, data: n.data, readAt: n.read_at, createdAt: n.created_at }, ...xs]),
+      load,
+    );
+  }, [user.id]);
 
   const unread = items.filter((n) => !n.readAt).length;
   function markRead() {
     if (!unread) return;
-    api("/notifications/read", { method: "POST" }).catch(() => {});
+    markNotificationsRead(user.id).catch(() => {});
     setItems((xs) => xs.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
   }
 

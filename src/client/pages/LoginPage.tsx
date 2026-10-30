@@ -1,19 +1,22 @@
 import { useState, type FormEvent } from "react";
-import type { User } from "../../shared/types/index.ts";
-import { api } from "../lib/api.ts";
+import { supabase } from "../lib/supabase.ts";
 
-export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
+export function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [error, setError] = useState("");
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-    try {
-      onLogin(await api<User>(`/auth/${mode}`, { body: Object.fromEntries(new FormData(e.currentTarget)) }));
-    } catch (err) {
-      setError((err as Error).message);
-    }
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email")).trim();
+    const password = String(form.get("password"));
+    // Success is picked up by onAuthStateChange in App.
+    const { error } =
+      mode === "login"
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password, options: { data: { name: String(form.get("name")).trim() } } });
+    if (error) setError(error.message);
   }
 
   return (
