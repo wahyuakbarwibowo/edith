@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import type { BoardSummary, Member, Workspace } from "../../shared/types/index.ts";
+import type { Member, User, Workspace } from "../../shared/types/index.ts";
 import { InlineForm } from "../components/InlineForm.tsx";
-import { api, report } from "../lib/api.ts";
+import { addMember as rpcAddMember, createBoard as insertBoard, createWorkspace as rpcCreateWorkspace, getMembers, getWorkspaces } from "../lib/data.ts";
 import { linkTo } from "../lib/router.ts";
-import { onEvent } from "../lib/socket.ts";
+import { report, subscribe } from "../lib/supabase.ts";
 
-export function HomePage() {
+export function HomePage({ user }: { user: User }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>();
-  const load = useCallback(() => api<Workspace[]>("/workspaces").then(setWorkspaces, report), []);
+  const load = useCallback(() => getWorkspaces(user.id).then(setWorkspaces, report), [user.id]);
 
+  // Being added to a workspace arrives as a notification on the user's topic.
   useEffect(() => {
     load();
-    return onEvent((e) => {
-      if (e.type === "notification" && e.notification.type === "workspace:added") load();
-    });
-  }, [load]);
+    return subscribe(`user:${user.id}`, "notification", (n) => n.type === "workspace:added" && load());
+  }, [load, user.id]);
 
-  const createWorkspace = (name: string) => api("/workspaces", { body: { name } }).then(load, report);
+  const createWorkspace = (name: string) => rpcCreateWorkspace(name).then(load, report);
 
   if (!workspaces) return null;
   return (
@@ -35,11 +34,9 @@ export function HomePage() {
 function WorkspaceSection({ workspace, reload }: { workspace: Workspace; reload: () => void }) {
   const [members, setMembers] = useState<Member[]>();
 
-  const createBoard = (title: string) =>
-    api<BoardSummary>("/boards", { body: { workspaceId: workspace.id, title } }).then(reload, report);
-  const loadMembers = () => api<Member[]>(`/workspaces/${workspace.id}/members`).then(setMembers, report);
-  const addMember = (email: string) =>
-    api(`/workspaces/${workspace.id}/members`, { body: { email } }).then(loadMembers, report);
+  const createBoard = (title: string) => insertBoard(workspace.id, title).then(reload, report);
+  const loadMembers = () => getMembers(workspace.id).then(setMembers, report);
+  const addMember = (email: string) => rpcAddMember(workspace.id, email).then(loadMembers, report);
 
   return (
     <section>
