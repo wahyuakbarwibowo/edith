@@ -29,16 +29,22 @@ Email confirmation is off and minimum password length is 8 (`supabase/config.tom
 
 | Script | What |
 | --- | --- |
+| `bun run build` | static production build into `dist/` |
 | `bun run db:push` | apply new migrations to the linked project |
 | `bun run db:types` | regenerate `src/shared/types/database.ts` after a schema change |
 | `bun run check:rls` | end-to-end RLS/realtime/storage check against the linked project (creates and deletes throwaway users) |
 | `bun run typecheck` | `bun check` |
 | `bun test` | unit tests |
 
-## Deploy
+## Deploy (Cloudflare Pages, free)
 
-```sh
-docker compose up -d --build
-```
+The app is a static SPA, so it needs no server of its own.
 
-Only the static app runs on the VPS. Put it behind TLS and add the public URL to Supabase Auth's site URL / redirect URLs.
+1. Cloudflare dashboard → Workers & Pages → Create → Pages → connect this GitHub repo.
+2. Build command `bun run build`, output directory `dist`.
+3. Environment variables: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, and `BUN_VERSION=1.4.4`.
+4. Supabase → Authentication → URL Configuration: set Site URL to the `*.pages.dev` (or custom) domain.
+
+Deep links like `/boards/<id>` work because Pages serves `index.html` for unknown paths when the build has no `404.html`.
+
+Manual alternative without Git integration: `bun run build && bunx wrangler pages deploy dist`.
