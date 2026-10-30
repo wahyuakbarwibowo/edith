@@ -1,9 +1,0 @@
-services:
-  app:
-    build: .
-    environment:
-      PUBLIC_SUPABASE_URL: ${PUBLIC_SUPABASE_URL:?set PUBLIC_SUPABASE_URL in .env}
-      PUBLIC_SUPABASE_ANON_KEY: ${PUBLIC_SUPABASE_ANON_KEY:?set PUBLIC_SUPABASE_ANON_KEY in .env}
-    ports:
-      - "3000:3000"
-    restart: unless-stopped
